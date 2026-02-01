@@ -45,11 +45,9 @@ From a practical HR perspective, this combination points to structural vulnerabi
 In contrast, the analysis identified a single unit (**Vince Kaminski’s group**) that functioned as the primary bridge between otherwise siloed parts of the organization. While this unit showed relatively open communication patterns, its response times exceeded the 24-hour threshold, suggesting **overload rather than inefficiency**. This reflects a common organizational risk pattern in which external communication responsibilities accumulate in one place as other units retreat inward, increasing the likelihood of burnout and system-level failure.
 
 ## Individual-Level Signals (Micro View)
-At the micro level, the project surfaced a small group of individuals within the most closed and slow-moving units who displayed markedly different behavior. These individuals responded far more quickly than their peers and exhibited unusually high levels of upward communication with senior leadership relative to lateral communication.
+Moving beyond organizational diagnostics, I conducted a 'Simulation Stress Test' to quantify the impact of specific individuals on network stability. This experiment compared the structural damage (LCC Loss) caused by removing 'Load Absorbers'—individuals handling high volumes of communication—versus removing 'Connectors,' who bridge structural gaps across departments.
 
-To verify their importance, I ran a **Simulation Stress Test**. The results were clear: removing these "Connectors" caused **4x more damage** to the network than removing people who simply handled high volumes of work.
-
-Within an open organization, such patterns might indicate strong performance or leadership potential. Within a highly closed structure, however, they raise questions about informal workflows that may bypass standard processes. This project does not attempt to label such individuals as high performers or bad actors. Instead, these patterns are treated as **diagnostic signals**. From an HR and governance perspective, **individuals who combine extreme responsiveness with concentrated upward communication represent key leverage points that warrant closer understanding.**
+The results revealed that organizational continuity hangs by a thread, dependent on a specific few. In Richard Shapiro’s unit, identified as a 'Black Hole' in the macro analysis, removing the top 10 Load Absorbers resulted in a negligible network connectivity loss of 0.89%. However, removing the **top 10 Connectors caused the loss to spike to 4.1%—a nearly 4.6x difference.** This disparity was even more extreme in Vince Kaminski’s 'Overloaded Hub,' where the loss from removing **Connectors (2.94%) was nearly 8 times greater than removing Load Absorbers (0.37%)**. This proves that network stability is not maintained by those with official titles or high workloads, but by a handful of 'Hidden Key Talents' who structurally hold the organization together.
 
 ## Limitations & Future Considerations
 While this project revealed deep insights, there are limitations to consider for future application:
@@ -58,9 +56,9 @@ While this project revealed deep insights, there are limitations to consider for
 2.  **Snapshot vs. Trend**: The current analysis looks at the data as a whole. A time-series analysis would be better to see how bottlenecks form during specific crisis periods.
 
 ## Why This Matters for HR Leaders
-Many organizational risks do not originate from individual underperformance, but from how work is structured and how information flows. Traditional HR metrics—such as engagement scores, turnover rates, or performance ratings—often capture outcomes only after problems have already materialized.
+This project demonstrates how communication network patterns can serve as **early indicators of organizational risk** before they manifest as turnover or failed projects. The macro analysis identified systemic vulnerabilities like the opacity of 'Black Holes' and the burnout risks of 'Overloaded Hubs,' while the micro simulation revealed that these fragile structures are often sustained by a small group of critical Connectors.
 
-This project demonstrates how communication network patterns can serve as **early indicators of organizational risk**. Structurally central yet closed units may accumulate opacity, while overloaded hubs can become single points of failure. At the individual level, extreme communication patterns may signal informal workflows that **bypass standard governance mechanisms**.
+Traditional HR metrics often capture outcomes too late. HR leaders need to shift from evaluating individuals to diagnosing the system itself. The true value of analytics lies in identifying exactly who is piercing the opacity of a closed unit and who is preventing the collapse of an overloaded one. 
 
 For HR leaders, the value of this approach lies not in labeling individuals, but in diagnosing systems. **Network-based analytics can support more informed decisions around organizational design, workload distribution, leadership pipelines, and risk governance, helping HR shift from reactive reporting to proactive organizational sensing**.
 
