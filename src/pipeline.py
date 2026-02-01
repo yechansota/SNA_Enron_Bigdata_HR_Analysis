@@ -2,7 +2,7 @@ import csv
 import re
 import sys
 import time
-from collections import defaultdict, deque
+from collections import deque, defaultdict
 
 import numpy as np
 import pandas as pd
@@ -27,8 +27,8 @@ EI_OPEN_THRESHOLD = -0.2
 VALID_DOMAINS = {"enron.com"}
 BETWEENNESS_SAMPLE_K = 200
 
-EI_MODE = "both"          # "count" / "weight" / "both"
-EI_FOR_TYPOLOGY = "weight"  # "count" / "weight"
+EI_MODE = "both"
+EI_FOR_TYPOLOGY = "weight"
 USE_SUBJECT_THREADING_FOR_RT = True
 
 
@@ -81,9 +81,7 @@ def process_data_pipeline(file_path: str, limit: int = 500000):
             next(reader, None)
 
             for count, row in enumerate(reader):
-                if count >= limit:
-                    break
-                if len(row) < 2:
+                if count >= limit or len(row) < 2:
                     continue
 
                 raw_msg = row[1]
@@ -108,9 +106,11 @@ def process_data_pipeline(file_path: str, limit: int = 500000):
                 if not is_valid_user(sender):
                     continue
 
-                receivers_raw = m_to.group(1).replace("\n", "").replace("\t", "")
-                receivers = [r.strip().lower() for r in receivers_raw.split(",") if "@" in r]
-                receivers = [r for r in receivers if is_valid_user(r)]
+                receivers = [
+                    r.strip().lower()
+                    for r in m_to.group(1).replace("\n", "").replace("\t", "").split(",")
+                    if "@" in r and is_valid_user(r)
+                ]
                 if not receivers:
                     continue
 
@@ -172,26 +172,25 @@ def compute_fragmentation_impact(G: nx.DiGraph, members: list) -> float:
     original_lcc = len(max(nx.weakly_connected_components(G), key=len))
     G_tmp = G.copy()
     G_tmp.remove_nodes_from(members)
-
     new_lcc = len(max(nx.weakly_connected_components(G_tmp), key=len)) if G_tmp.number_of_nodes() > 0 else 0
-    loss = (original_lcc - new_lcc) / original_lcc * 100 if original_lcc > 0 else 0.0
-    return round(loss, 2)
+    return round((original_lcc - new_lcc) / original_lcc * 100, 2) if original_lcc > 0 else 0.0
 
 
 def assign_typology(row: pd.Series) -> str:
     avg_rt = row["Avg_Response_H"]
     ei = row["EI_Index"]
 
-    is_slow = (not pd.isna(avg_rt)) and (avg_rt > SLOW_THRESHOLD_H)
-    is_open = (not pd.isna(ei)) and (ei > EI_OPEN_THRESHOLD)
+    is_slow = not pd.isna(avg_rt) and avg_rt > SLOW_THRESHOLD_H
+    is_open = not pd.isna(ei) and ei > EI_OPEN_THRESHOLD
 
-    if is_slow and (not is_open):
+    if is_slow and not is_open:
         return "Black Hole"
-    if is_slow and is_open:
+    elif is_slow and is_open:
         return "Overloaded Hub"
-    if (not is_slow) and (not is_open):
+    elif not is_slow and not is_open:
         return "Bureaucratic"
-    return "Agile Connector"
+    else:
+        return "Agile Connector"
 
 
 def detect_communities_and_macro_table(G: nx.DiGraph, user_stats: dict, top_n: int = 10):
@@ -202,12 +201,7 @@ def detect_communities_and_macro_table(G: nx.DiGraph, user_stats: dict, top_n: i
 
     dept_members = {}
     user_dept_map = {}
-
-    user_avg_rt = {
-        u: (float(np.mean(st["response_times"])) if st["response_times"] else np.nan)
-        for u, st in user_stats.items()
-    }
-
+    user_avg_rt = {u: np.mean(st["response_times"]) if st["response_times"] else np.nan for u, st in user_stats.items()}
     rows = []
 
     for i, members in enumerate(comms, start=1):
@@ -215,20 +209,17 @@ def detect_communities_and_macro_table(G: nx.DiGraph, user_stats: dict, top_n: i
         if len(members) < 10:
             continue
 
-        key_user = max(members, key=lambda x: user_stats[x]["in_degree_count"] if x in user_stats else 0)
+        key_user = max(members, key=lambda x: user_stats[x]["in_degree_count"])
         dept_id = f"C{i}_{key_user.split('@')[0]}"
 
         dept_members[dept_id] = members
         for m in members:
             user_dept_map[m] = dept_id
 
+        internal_c = external_c = internal_w = external_w = 0
         member_set = set(members)
-        internal_c = external_c = 0
-        internal_w = external_w = 0
 
         for m in members:
-            if m not in G:
-                continue
             for n in G.successors(m):
                 w = G[m][n].get("weight", 1)
                 if n in member_set:
@@ -240,55 +231,37 @@ def detect_communities_and_macro_table(G: nx.DiGraph, user_stats: dict, top_n: i
 
         total_c = internal_c + external_c
         total_w = internal_w + external_w
+
         ei_c = (external_c - internal_c) / total_c if total_c > 0 else 0.0
         ei_w = (external_w - internal_w) / total_w if total_w > 0 else 0.0
 
-        rts = [user_avg_rt[u] for u in members if u in user_avg_rt and not np.isnan(user_avg_rt[u])]
-        avg_rt = float(np.mean(rts)) if rts else np.nan
-        med_rt = float(np.median(rts)) if rts else np.nan
+        rts = [user_avg_rt[u] for u in members if not np.isnan(user_avg_rt[u])]
+        avg_rt = np.mean(rts) if rts else np.nan
 
-        bn_cnt = sum(1 for u in members if u in user_avg_rt and (not np.isnan(user_avg_rt[u])) and user_avg_rt[u] > SLOW_THRESHOLD_H)
-        bn_density = (bn_cnt / len(members) * 100)
-
-        loads = sorted([user_stats[u]["in_degree_count"] for u in members if u in user_stats], reverse=True)
+        bn_cnt = sum(1 for u in members if not np.isnan(user_avg_rt[u]) and user_avg_rt[u] > SLOW_THRESHOLD_H)
+        loads = sorted([user_stats[u]["in_degree_count"] for u in members], reverse=True)
         total_load = sum(loads)
         top_k = max(1, int(len(members) * 0.1))
-        skew = (sum(loads[:top_k]) / total_load * 100) if total_load > 0 else np.nan
+        skew = sum(loads[:top_k]) / total_load * 100 if total_load > 0 else np.nan
 
         row = {
             "Dept_ID": dept_id,
             "Size": len(members),
             "Avg_Response_H": round(avg_rt, 2) if not np.isnan(avg_rt) else np.nan,
-            "Median_Response_H": round(med_rt, 2) if not np.isnan(med_rt) else np.nan,
-            "Bottleneck_Density_%": round(bn_density, 1),
+            "Bottleneck_Density_%": round(bn_cnt / len(members) * 100, 1),
             "Workload_Skew_%": round(skew, 1) if not np.isnan(skew) else np.nan,
+            "EI_Count": round(ei_c, 2),
+            "EI_Weight": round(ei_w, 2),
         }
-
-        if EI_MODE in ("count", "both"):
-            row["EI_Count"] = round(ei_c, 2)
-        if EI_MODE in ("weight", "both"):
-            row["EI_Weight"] = round(ei_w, 2)
-
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    if df.empty:
-        print("[Macro] no communities after filtering")
-        return df, dept_members, user_dept_map, Q
-
     df["Frag_Impact_%"] = df["Dept_ID"].apply(lambda d: compute_fragmentation_impact(G, dept_members[d]))
     df["EI_Index"] = df.apply(pick_ei_for_typology, axis=1)
     df["Typology"] = df.apply(assign_typology, axis=1)
 
     df = df.sort_values("Frag_Impact_%", ascending=False)
-
-    show_cols = ["Dept_ID", "Size", "Frag_Impact_%", "EI_Index", "Avg_Response_H", "Bottleneck_Density_%", "Workload_Skew_%", "Typology"]
-    if "EI_Count" in df.columns:
-        show_cols.insert(3, "EI_Count")
-    if "EI_Weight" in df.columns:
-        show_cols.insert(4 if "EI_Count" in df.columns else 3, "EI_Weight")
-
-    print(df[show_cols].head(top_n).to_string(index=False))
+    print(df.head(top_n).to_string(index=False))
     return df, dept_members, user_dept_map, Q
 
 
@@ -296,24 +269,19 @@ def build_individual_table(G: nx.DiGraph, user_stats: dict, user_dept_map: dict)
     rows = []
     for u in G.nodes():
         st = user_stats[u]
-        avg_rt = float(np.mean(st["response_times"])) if st["response_times"] else np.nan
+        avg_rt = np.mean(st["response_times"]) if st["response_times"] else np.nan
 
-        dept_u = user_dept_map.get(u)
-        ext_w = 0
-        tot_w = 0
-
+        ext_w = tot_w = 0
         for v in G.successors(u):
-            w = G[u][v].get("weight", 1)
+            w = G[u][v]["weight"]
             tot_w += w
-            if dept_u and user_dept_map.get(v) != dept_u:
+            if user_dept_map.get(v) != user_dept_map.get(u):
                 ext_w += w
 
         rows.append({
             "User": u,
             "Dept_ID": user_dept_map.get(u, "Unknown"),
             "Received_Count": st["in_degree_count"],
-            "In_Strength": st["in_strength"],
-            "Out_Strength": st["out_strength"],
             "Avg_Response_H": round(avg_rt, 2) if not np.isnan(avg_rt) else np.nan,
             "External_Out_%": round(ext_w / tot_w * 100, 1) if tot_w > 0 else 0.0
         })
@@ -322,9 +290,7 @@ def build_individual_table(G: nx.DiGraph, user_stats: dict, user_dept_map: dict)
 
 
 def add_betweenness_for_micro(indiv_df: pd.DataFrame, G: nx.DiGraph):
-    n = G.number_of_nodes()
-    k = BETWEENNESS_SAMPLE_K if n > 1000 else None
-    btw = nx.betweenness_centrality(G, k=k)
+    btw = nx.betweenness_centrality(G, k=BETWEENNESS_SAMPLE_K)
     indiv_df["Betweenness"] = [btw.get(u, 0.0) for u in indiv_df.index]
     return indiv_df
 
@@ -333,47 +299,117 @@ def visualize_top10(cluster_df: pd.DataFrame):
     if cluster_df.empty:
         return
 
-    top_df = cluster_df.head(10).copy()
+    top_df = cluster_df.head(10)
     plt.figure(figsize=(12, 8))
-
     scatter = plt.scatter(
-        top_df["EI_Index"].fillna(0),
-        top_df["Avg_Response_H"].fillna(0),
+        top_df["EI_Index"],
+        top_df["Avg_Response_H"],
         s=top_df["Size"] * 5,
-        c=top_df["Frag_Impact_%"].fillna(0),
+        c=top_df["Frag_Impact_%"],
         cmap="viridis",
         alpha=0.85,
         edgecolors="k"
     )
-
-    plt.axvline(x=EI_OPEN_THRESHOLD, color="gray", linestyle="--")
-    plt.axhline(y=SLOW_THRESHOLD_H, color="red", linestyle="--")
-
+    plt.axvline(EI_OPEN_THRESHOLD, linestyle="--", color="gray")
+    plt.axhline(SLOW_THRESHOLD_H, linestyle="--", color="red")
     plt.colorbar(scatter, label="Frag Impact (%)")
-    plt.title("Top10 Organizational Dynamics Map (EI vs RT, size=dept, color=frag)")
     plt.xlabel("Openness (E–I Index)")
     plt.ylabel("Avg Response Time (hours)")
+    plt.title("Top10 Organizational Dynamics Map")
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.show()
+
+
+def run_micro_simulation(G: nx.DiGraph, dept_id: str, members: list, user_stats: dict, top_k: int = 5):
+    if not members:
+        return
+
+    sorted_by_load = sorted(members, key=lambda x: user_stats[x]["in_degree_count"], reverse=True)[:top_k]
+
+    orig_lcc = len(max(nx.weakly_connected_components(G), key=len))
+
+    G_load = G.copy()
+    G_load.remove_nodes_from(sorted_by_load)
+    new_lcc_load = len(max(nx.weakly_connected_components(G_load), key=len))
+    loss_load = (orig_lcc - new_lcc_load) / orig_lcc * 100
+
+    btw_subset = nx.betweenness_centrality_subset(G, sources=members, targets=list(G.nodes()), normalized=True)
+    sorted_by_conn = sorted(members, key=lambda x: btw_subset.get(x, 0), reverse=True)[:top_k]
+
+    G_conn = G.copy()
+    G_conn.remove_nodes_from(sorted_by_conn)
+    new_lcc_conn = len(max(nx.weakly_connected_components(G_conn), key=len))
+    loss_conn = (orig_lcc - new_lcc_conn) / orig_lcc * 100
+
+    print(f"\n[Micro Simulation] {dept_id} (Removing Top {top_k})")
+    print(f"   - Remove Load Absorbers: LCC Loss = {loss_load:.2f}%")
+    print(f"   - Remove Connectors:     LCC Loss = {loss_conn:.2f}%")
+    if loss_load > 0:
+        multiplier = loss_conn / loss_load
+        print(f"   => Connector Impact is {multiplier:.1f}x greater than Volume Impact")
+
+
+def visualize_dept_micro(indiv_df: pd.DataFrame, dept_id: str, typology: str):
+    dept_df = indiv_df[indiv_df["Dept_ID"] == dept_id].copy()
+
+    if dept_df.empty:
+        print(f"No members found for {dept_id}")
+        return
+
+    plt.figure(figsize=(10, 7))
+
+    x = dept_df["Received_Count"]
+    y = dept_df["Betweenness"]
+
+    sc = plt.scatter(
+        x, y,
+        c=dept_df["Avg_Response_H"],
+        cmap="coolwarm_r",
+        s=100,
+        edgecolors="k",
+        alpha=0.8
+    )
+
+    plt.colorbar(sc, label="Avg Response Time (Hours)")
+    plt.title(f"Micro View: {dept_id} ({typology})", fontsize=14)
+    plt.xlabel("Workload Volume (In-Degree)", fontsize=12)
+    plt.ylabel("Structural Influence (Betweenness)", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.5)
+
+    top_connectors = dept_df.nlargest(3, "Betweenness")
+    for idx, row in top_connectors.iterrows():
+        plt.text(row["Received_Count"], row["Betweenness"],
+                 idx.split("@")[0], fontsize=9, fontweight='bold', ha='right')
+
+    plt.tight_layout()
     plt.show()
 
 
 if __name__ == "__main__":
-    file_path = "data/emails.csv"
+    file_path = "/Users/sean/Downloads/emails.csv"
     TOP_N = 10
 
-    print("=" * 80)
-    print("Enron HR Analytics | Network-based Bottleneck & Role Diagnostics")
-    print("=" * 80)
-
-    G, user_stats, temporal_data, kept = process_data_pipeline(file_path, limit=500000)
+    G, user_stats, temporal_data, kept = process_data_pipeline(file_path)
     if G is None or kept == 0:
-        print("Failed: check file path and csv format.")
         sys.exit(0)
 
-    cluster_df, dept_members, user_dept_map, Q = detect_communities_and_macro_table(G, user_stats, top_n=TOP_N)
-    if cluster_df.empty:
-        sys.exit(0)
+    cluster_df, dept_members, user_dept_map, Q = detect_communities_and_macro_table(G, user_stats, TOP_N)
 
     indiv_df = build_individual_table(G, user_stats, user_dept_map)
     indiv_df = add_betweenness_for_micro(indiv_df, G)
 
+    print("\n[Visualizing Macro View...]")
     visualize_top10(cluster_df)
+
+    if not cluster_df.empty:
+        target_dept = cluster_df.iloc[0]
+        dept_id = target_dept["Dept_ID"]
+        typology = target_dept["Typology"]
+
+        print(f"\n[Drill Down Analysis] Target: {dept_id} ({typology})")
+
+        members = dept_members[dept_id]
+        run_micro_simulation(G, dept_id, members, user_stats, top_k=10)
+
+        print(f"Visualizing Micro View for {dept_id}...")
+        visualize_dept_micro(indiv_df, dept_id, typology)
