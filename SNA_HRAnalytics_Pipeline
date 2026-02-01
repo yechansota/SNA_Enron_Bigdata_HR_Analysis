@@ -10,14 +10,14 @@ Description:
 - Translates large-scale email communication data into organizational risk signals
 - Focuses on structural bottlenecks, workload concentration, and fragility
 - Avoids individual ranking; emphasizes system-level diagnostics
-- Validates findings via simulation (stress tests)
+- Validates findings via simulation
 
 Pipeline:
 1. ETL + Noise Reduction + Reply-based Response Time
 2. Directed, Weighted Network Construction
-3. Macro Diagnostics (Communities, Openness, Sluggishness)
+3. Macro Diagnostics (Communities, Openness)
 4. Macro Simulation (Fragmentation Impact)
-5. Micro Role Signals (Load Absorbers, Connectors)
+5. Micro Role Signals (Connectors)
 6. Micro Simulation (Key Operator Stress Test)
 7. HR-Readable Interpretation & Actions
 
